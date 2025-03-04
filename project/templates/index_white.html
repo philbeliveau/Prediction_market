@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="{{ url_for('static', filename='script.js') }}"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            text-align: center;
+            margin: 20px;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        .tab-container {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s ease-in-out;
+            border-radius: 5px 5px 0 0;
+            margin: 0 5px;
+        }
+
+        .tab:hover {
+            background-color: #0056b3;
+        }
+
+        .tab.active {
+            background-color: #0056b3;
+            box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            max-width: 100%;
+            margin: 20px auto;
+            padding: 10px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            background-color: white;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: #007bff;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        canvas {
+            display: block;
+            margin: 20px auto;
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        select {
+            padding: 8px;
+            font-size: 14px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Polymarket Dashboard</h1>
+
+    <div class="tab-container">
+        <button class="tab active" onclick="openTab(event, 'market-data')">Market Data</button>
+        <button class="tab" onclick="openTab(event, 'analysis')">Analysis</button>
+        <button class="tab" onclick="openTab(event, 'llm-assistant')">LLM Assistant</button>
+    </div>
+    
+    
+    <!-- Market Data Tab -->
+    <div id="market-data" class="tab-content active">
+        <h2>Market Data</h2>
+        
+        <!-- Topic Filter Dropdown -->
+        <label for="topic-filter">Filter by Topic:</label>
+        <select id="topic-filter" onchange="fetchMarketData()">
+            <option value="">All Topics</option>
+        </select>
+        
+        <table id="data-table">
+            <thead>
+                <tr>
+                    <th>Market Question</th>
+                    <th>Creation Date</th>
+                    <th>Market Chance</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        
+        <h2>Market Chance Visualization</h2>
+        <canvas id="marketChart"></canvas>
+    </div>
+    
+    <!-- Analysis Tab -->
+    <div id="analysis" class="tab-content">
+        <h2>Sentiment Analysis</h2>
+        
+        <label for="analysis-topic-filter">Filter by Topic:</label>
+        <select id="analysis-topic-filter" onchange="fetchSentimentAnalysis()">
+            <option value="">All Topics</option>
+        </select>
+        
+        <canvas id="sentimentChart"></canvas>
+        
+        <h2>Important Words</h2>
+        <div id="topic-keywords"></div>
+        
+        <h2>Topic Modeling Results</h2>
+        <button onclick="fetchTopics()">Run Topic Modeling</button>
+        <div id="topic-results"></div>
+    </div>
+    
+    <!-- LLM Assistant Tab -->
+    <div id="llm-assistant" class="tab-content">
+        <h2>AI Assistant (Jina Deepsearch)</h2>
+        <p>Ask a question and get an answer from Jina.ai</p>
+    
+        <input type="text" id="llm-query" placeholder="Enter your question" />
+        <button onclick="queryLLM()">Ask</button>
+    
+        <h3>Response:</h3>
+        <div id="llm-response"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            fetchTopics();
+            fetchMarketData();
+        });
+
+        function openTab(event, tabName) {
+            const tabContents = document.querySelectorAll(".tab-content");
+            tabContents.forEach(content => content.style.display = "none");
+
+            const tabs = document.querySelectorAll(".tab");
+            tabs.forEach(tab => tab.classList.remove("active"));
+
+            document.getElementById(tabName).style.display = "block";
+            event.currentTarget.classList.add("active");
+        }
+
+        function fetchMarketData() {
+            const topicFilter = document.getElementById("topic-filter").value;
+            let url = "/market_data";
+            if (topicFilter) url += `?topic=${topicFilter}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector("#data-table tbody");
+                    tbody.innerHTML = "";
+
+                    data.forEach(item => {
+                        const row = document.createElement("tr");
+
+                        const questionCell = document.createElement("td");
+                        questionCell.textContent = item.market_question;
+                        row.appendChild(questionCell);
+
+                        const dateCell = document.createElement("td");
+                        dateCell.textContent = new Date(item.market_creation_date).toISOString().split('T')[0];
+                        row.appendChild(dateCell);
+
+                        const chanceCell = document.createElement("td");
+                        chanceCell.textContent = item.market_chance;
+                        row.appendChild(chanceCell);
+
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+        document.addEventListener("DOMContentLoaded", function () {
+    fetchTopics();
+    fetchMarketData();
+});
+
+        // Fetch Topics and Update Dropdowns
+        function fetchTopics() {
+            fetch('/topics')
+                .then(response => response.json())
+                .then(data => {
+                    const topicDropdowns = [document.getElementById('topic-filter'), document.getElementById('analysis-topic-filter')];
+
+                    topicDropdowns.forEach(dropdown => {
+                        dropdown.innerHTML = '<option value="">All Topics</option>';
+                        Object.keys(data.topics).forEach(topic => {
+                            const option = document.createElement("option");
+                            option.value = topic;
+                            option.textContent = topic;
+                            dropdown.appendChild(option);
+                        });
+                    });
+
+            // Show important words per topic
+            const topicResults = document.getElementById("topic-results");
+            topicResults.innerHTML = "";
+            Object.entries(data.topics).forEach(([topic, words]) => {
+                const topicDiv = document.createElement("div");
+                topicDiv.innerHTML = `<h3>${topic}</h3><p><strong>Key Terms:</strong> ${words.join(", ")}</p>`;
+                topicResults.appendChild(topicDiv);
+            });
+        });
+}
+
+        // Fetch Sentiment Analysis Per Topic
+        function fetchSentimentAnalysis() {
+            const topicFilter = document.getElementById("analysis-topic-filter").value;
+            let url = "/analysis";
+            if (topicFilter) url += `?topic=${topicFilter}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const ctx = document.getElementById('sentimentChart').getContext('2d');
+                    
+                    if (window.sentimentChartInstance) {
+                        window.sentimentChartInstance.destroy();
+                    }
+
+                    window.sentimentChartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ["Positive", "Neutral", "Negative"],
+                            datasets: [{
+                                label: 'Sentiment Count',
+                                data: [
+                                    data.sentiment_summary.Positive, 
+                                    data.sentiment_summary.Neutral, 
+                                    data.sentiment_summary.Negative
+                                ],
+                                backgroundColor: ["green", "gray", "red"]
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: { beginAtZero: true }
+                            }
+                        }
+                    });
+
+                    // Show topic key terms if available
+                    const keyWordsDiv = document.getElementById("topic-keywords");
+                    keyWordsDiv.innerHTML = `<h3>Important Words for ${topicFilter}</h3><p>${data.topic_words.join(", ")}</p>`;
+                });
+        }
+
+        function queryLLM() {
+        const userQuery = document.getElementById("llm-query").value;
+        const responseDiv = document.getElementById("llm-response");
+
+        if (!userQuery) {
+            responseDiv.innerHTML = "<p style='color: red;'>Please enter a question.</p>";
+            return;
+        }
+
+        responseDiv.innerHTML = "<p>Loading...</p>";
+
+        fetch("/query_llm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: userQuery })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                responseDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+            } else {
+                responseDiv.innerHTML = `<p><strong>AI Response:</strong> ${data.response}</p>`;
+            }
+        })
+        .catch(error => {
+            responseDiv.innerHTML = `<p style="color: red;">Failed to get response.</p>`;
+            console.error("Error querying LLM:", error);
+        });
+    }
+    </script>
+</body>
+</html>
